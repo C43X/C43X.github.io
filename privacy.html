@@ -1,79 +1,1061 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Privacy Policy</title>
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body>
-  <!-- Header / Navigation -->
-  <header class="site-header">
-    <nav class="navbar">
-      <div class="logo">YourLogo</div>
-      <ul class="nav-links">
-        <li><a href="index.html">Home</a></li>
-        <li><a href="terms.html">Terms</a></li>
-      </ul>
-    </nav>
-  </header>
+/**
+ * BOT.JS
+ * An enhanced Discord bot that logs server events and provides slash commands with optimized embed formatting for better readability and user experience.
+ */
 
-  <!-- Content Container -->
-  <div class="container">
-    <h1>Privacy Policy</h1>
-    <p><strong>Last Updated:</strong> [Date]</p>
+'use strict';
 
-    <h2>1. Data We Collect</h2>
-    <p>
-      The Bot automatically logs user actions within Discord servers where it is present. This includes messages, command usage, and other interactions (“Logged Data”). The Logged Data is primarily stored as Discord messages.
-    </p>
+// ----------------------
+//      DEPENDENCIES
+// ----------------------
+const {
+  Client,
+  GatewayIntentBits,
+  EmbedBuilder,
+  SlashCommandBuilder,
+  Routes,
+  ActivityType,
+  ButtonBuilder,
+  ButtonStyle,
+  ActionRowBuilder,
+  PermissionsBitField,
+} = require('discord.js');
+const { REST } = require('@discordjs/rest');
+const { joinVoiceChannel, getVoiceConnection } = require('@discordjs/voice');
+const readline = require('readline');
+const { token, clientId, guildId } = require('./config.json');
 
-    <h2>2. How We Use the Data</h2>
-    <p>
-      We use Logged Data to provide and maintain the Bot’s features, to moderate or troubleshoot server activities, and to ensure the Bot’s functionality. We do not sell or rent Logged Data to third parties.
-    </p>
+// ----------------------
+//      CONSTANTS
+// ----------------------
+const LOG_CHANNEL_ID = '1252351581903519944'; // Channel where logs will be sent
+const EXCLUDED_LOG_CHANNEL_IDS = ['1246122643791282378', '1153135118936965140']; // Channels to exclude from logging
+const EMBED_COLORS = {
+  PURPLE: 0x800080,
+  RED: 0xff0000,
+  GREEN: 0x00ff00,
+  BLUE: 0x0000ff,
+  YELLOW: 0xffff00,
+};
+const COMMAND_COOLDOWNS = new Map(); // To track command usage for cooldowns
 
-    <h2>3. Data Storage and Retention</h2>
-    <p>
-      Logged Data is stored in Discord’s infrastructure, and its retention depends on Discord’s policies and the settings of each server. We do not store or transfer Logged Data to external databases unless explicitly stated.
-    </p>
+// Emojis for various events
+const EMOJIS = {
+  MESSAGE_SENT: '📝',
+  MESSAGE_DELETED: '🗑️',
+  MESSAGE_EDITED: '✏️',
+  MEMBER_JOINED: '🎉',
+  MEMBER_LEFT: '👋',
+  USER_BANNED: '🔨',
+  USER_UNBANNED: '🛡️',
+  ROLE_UPDATED: '🔄',
+  VOICE_JOINED: '🔊',
+  VOICE_LEFT: '🔇',
+  VOICE_SWAPPED: '🔀',
+  INVITE_CREATED: '📩',
+  SUCCESS: '✅',
+  FAILURE: '❌',
+  INFO: 'ℹ️',
+  WARNING: '⚠️',
+  PING: '🏓',
+  USERINFO: '👤',
+};
 
-    <h2>4. Data Sharing</h2>
-    <p>
-      We do not share Logged Data with third parties, except:
-    </p>
-    <ul>
-      <li>When required by law or valid legal process.</li>
-      <li>To protect our rights, property, or safety, or that of others.</li>
-    </ul>
-    <p>
-      Data processed by Discord is subject to Discord’s own Privacy Policy.
-    </p>
+// ----------------------
+//     CLIENT SETUP
+// ----------------------
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildBans,
+    GatewayIntentBits.GuildMessageReactions,
+    GatewayIntentBits.GuildInvites,
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildScheduledEvents,
+    GatewayIntentBits.DirectMessages,
+  ],
+  partials: ['CHANNEL'], // Required to receive DMs
+});
 
-    <h2>5. Security</h2>
-    <p>
-      While we strive to secure the Bot’s access, no method of electronic transmission or storage is 100% secure. We are not responsible for breaches arising from Discord’s platform or misconfigurations beyond our control.
-    </p>
+// ----------------------
+//  REGISTER COMMANDS
+// ----------------------
+client.once('ready', async () => {
+  console.log(`🚀 Logged in as ${client.user.tag}!`);
 
-    <h2>6. Children’s Privacy</h2>
-    <p>
-      The Bot is intended for general audiences and is not directed at children under the age required by Discord (usually 13). If you become aware that a minor is using the Bot in violation of local laws, please contact us immediately.
-    </p>
+  const rest = new REST({ version: '10' }).setToken(token);
+  try {
+    if (!clientId || !guildId) {
+      throw new Error('clientId or guildId is undefined. Check your config.json file.');
+    }
 
-    <h2>7. Changes to This Policy</h2>
-    <p>
-      We may update this Privacy Policy from time to time. Continued use of the Bot after the changes become effective indicates your acceptance of the updated Policy.
-    </p>
+    // Remove all existing commands for this guild
+    console.log('🧹 Deleting all existing commands...');
+    await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: [] });
+    console.log('✅ Successfully deleted all commands.');
 
-    <h2>8. Contact Information</h2>
-    <p>
-      For questions or concerns about this Privacy Policy, please contact us at [Contact Info].
-    </p>
-  </div>
+    // Build and register slash commands
+    const slashCommands = buildSlashCommands().map((cmd) => cmd.toJSON());
 
-  <!-- Footer -->
-  <footer class="site-footer">
-    <p>&copy; 2023 Your Company Name. All rights reserved.</p>
-  </footer>
-</body>
-</html>
+    console.log('📝 Registering slash commands...');
+    await rest.put(Routes.applicationGuildCommands(clientId, guildId), {
+      body: slashCommands,
+    });
+    console.log('✅ Successfully registered commands.');
+
+    // Set initial presence
+    client.user.setPresence({
+      activities: [{ name: 'Monitoring the server', type: ActivityType.Watching }],
+      status: 'online',
+    });
+  } catch (error) {
+    console.error('❌ Error while registering commands:', error);
+    await logErrorToDiscord(error, 'Error During Command Registration');
+    process.exit(1); // Exit the process after logging the error
+  }
+});
+
+// Function to build slash commands
+function buildSlashCommands() {
+  return [
+    new SlashCommandBuilder()
+      .setName('joinchannel')
+      .setDescription('🔊 Join a voice channel')
+      .addStringOption((option) =>
+        option
+          .setName('channel_id')
+          .setDescription('The ID of the voice channel to join')
+          .setRequired(true)
+      ),
+    new SlashCommandBuilder()
+      .setName('leavechannel')
+      .setDescription('🔇 Leave the current voice channel'),
+    new SlashCommandBuilder()
+      .setName('sendmsg')
+      .setDescription('📤 Send a message to a specific channel')
+      .addStringOption((option) =>
+        option
+          .setName('message')
+          .setDescription('The message to send')
+          .setRequired(true)
+      )
+      .addStringOption((option) =>
+        option
+          .setName('channel_id')
+          .setDescription('The ID of the channel to send the message to')
+          .setRequired(true)
+      )
+      .addStringOption((option) =>
+        option
+          .setName('message_link')
+          .setDescription('Link to the message to reply to')
+          .setRequired(false)
+      ),
+    new SlashCommandBuilder()
+      .setName('dm')
+      .setDescription('📩 Send a direct message to a user')
+      .addStringOption((option) =>
+        option
+          .setName('user_id')
+          .setDescription('The ID of the user to send the message to')
+          .setRequired(true)
+      )
+      .addStringOption((option) =>
+        option
+          .setName('message')
+          .setDescription('The message to send')
+          .setRequired(true)
+      ),
+    new SlashCommandBuilder()
+      .setName('status')
+      .setDescription('🎭 Update the bot status')
+      .addStringOption((option) =>
+        option
+          .setName('status_type')
+          .setDescription('Type of status (playing, listening, watching, competing, none)')
+          .setRequired(true)
+          .addChoices(
+            { name: 'Playing', value: 'PLAYING' },
+            { name: 'Listening', value: 'LISTENING' },
+            { name: 'Watching', value: 'WATCHING' },
+            { name: 'Competing', value: 'COMPETING' },
+            { name: 'None', value: 'NONE' }
+          )
+      )
+      .addStringOption((option) =>
+        option
+          .setName('status_message')
+          .setDescription('The status message to display')
+          .setRequired(false)
+      )
+      .addStringOption((option) =>
+        option
+          .setName('custom_prefix')
+          .setDescription('Optional custom prefix for your status message')
+          .setRequired(false)
+      ),
+    new SlashCommandBuilder()
+      .setName('ping')
+      .setDescription('🏓 Check the bot\'s latency'),
+    new SlashCommandBuilder()
+      .setName('userinfo')
+      .setDescription('👤 Display information about a user')
+      .addUserOption((option) =>
+        option
+          .setName('target')
+          .setDescription('The user to get information about')
+          .setRequired(false)
+      ),
+  ];
+}
+
+// ----------------------
+//  COMMAND-LINE INPUT
+// ----------------------
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+});
+
+rl.on('line', async (input) => {
+  const rest = new REST({ version: '10' }).setToken(token);
+  const [command, selectedGuildId = guildId] = input.trim().split(' ');
+
+  if (command === 'deleteCommands') {
+    try {
+      if (!selectedGuildId) {
+        throw new Error('Guild ID is required to delete commands.');
+      }
+      console.log(`🧹 Deleting all commands for guild ${selectedGuildId}...`);
+      await rest.put(Routes.applicationGuildCommands(clientId, selectedGuildId), { body: [] });
+      console.log(`✅ Successfully deleted all commands for guild ${selectedGuildId}.`);
+    } catch (error) {
+      console.error('❌ Error deleting commands:', error);
+      await logErrorToDiscord(error, 'Error During Command Deletion');
+    }
+  } else {
+    console.log('❓ Unknown command:', input);
+  }
+});
+
+// ----------------------
+//   HELPER FUNCTIONS
+// ----------------------
+
+/**
+ * Sends an embed to the log channel, if available.
+ * @param {EmbedBuilder} embed - The embed to send.
+ */
+function sendLogEmbed(embed) {
+  const logChannel = client.channels.cache.get(LOG_CHANNEL_ID);
+  if (logChannel) {
+    logChannel.send({ embeds: [embed] }).catch((error) => {
+      console.error('❌ Failed to send log embed:', error);
+    });
+  } else {
+    console.error('❌ Log channel not found.');
+  }
+}
+
+/**
+ * Creates a consistent footer for embeds.
+ * @returns {Object} - The footer object.
+ */
+function createFooter() {
+  return { text: 'Server Log', iconURL: client.user.displayAvatarURL({ dynamic: true }) };
+}
+
+/**
+ * Handles errors by logging them and notifying the user.
+ * @param {Error} error - The error to handle.
+ * @param {string} context - The context or location where the error occurred.
+ */
+async function handleError(error, interaction) {
+  console.error('❌ An error occurred:', error);
+  await logErrorToDiscord(error, `Error in ${interaction.commandName || 'Process'}`);
+
+  if (interaction && !interaction.replied) {
+    await interaction.reply({
+      content: `${EMOJIS.FAILURE} An unexpected error occurred. Please try again later.`,
+      ephemeral: true,
+    });
+  }
+}
+
+/**
+ * Logs errors to the designated Discord log channel.
+ * @param {Error} error - The error to log.
+ * @param {string} context - The context or location where the error occurred.
+ */
+async function logErrorToDiscord(error, context) {
+  try {
+    const embed = new EmbedBuilder()
+      .setAuthor({
+        name: 'Error Logger',
+        iconURL: client.user ? client.user.displayAvatarURL({ dynamic: true }) : undefined,
+      })
+      .setTitle(`${EMOJIS.FAILURE} ${context}`)
+      .setDescription(`\`\`\`${error.stack || error}\`\`\``)
+      .setColor(EMBED_COLORS.RED)
+      .setFooter(createFooter())
+      .setTimestamp();
+
+    sendLogEmbed(embed);
+  } catch (loggingError) {
+    console.error('❌ Failed to log error to Discord:', loggingError);
+  }
+}
+
+/**
+ * Extracts the message ID from a Discord message link.
+ * @param {string} link - The message link.
+ * @returns {string|null} - The extracted message ID or null if invalid.
+ */
+function extractMessageId(link) {
+  const parts = link.trim().split('/');
+  const messageId = parts.pop() || parts.pop(); // Handle trailing slash
+  return messageId && /^\d+$/.test(messageId) ? messageId : null;
+}
+
+/**
+ * Implements a cooldown mechanism for commands.
+ * @param {string} userId - The ID of the user.
+ * @param {string} commandName - The name of the command.
+ * @param {number} cooldown - The cooldown duration in seconds.
+ * @returns {boolean} - Whether the user is on cooldown.
+ */
+function isOnCooldown(userId, commandName, cooldown) {
+  const now = Date.now();
+  const timestamps = COMMAND_COOLDOWNS.get(userId) || {};
+  const expirationTime = timestamps[commandName] || 0;
+
+  if (now < expirationTime) {
+    return true;
+  }
+
+  timestamps[commandName] = now + cooldown * 1000;
+  COMMAND_COOLDOWNS.set(userId, timestamps);
+  return false;
+}
+
+// ----------------------
+//     EVENT HANDLERS
+// ----------------------
+
+// Logs messages sent (except in excluded channels).
+client.on('messageCreate', (message) => {
+  if (message.author.bot) return;
+  if (message.guild && EXCLUDED_LOG_CHANNEL_IDS.includes(message.channel.id)) return;
+
+  if (message.guild) {
+    const embed = new EmbedBuilder()
+      .setAuthor({
+        name: message.author.tag,
+        iconURL: message.author.displayAvatarURL({ dynamic: true }),
+      })
+      .setTitle(`${EMOJIS.MESSAGE_SENT} Message Sent`)
+      .setDescription(`📝 **${message.author}** sent a message in **${message.channel}**.`)
+      .addFields(
+        {
+          name: '📄 Content',
+          value: message.content || '_No content_',
+          inline: false,
+        },
+        {
+          name: '🔗 Link',
+          value: `[Jump to Message](https://discord.com/channels/${message.guild.id}/${message.channel.id}/${message.id})`,
+          inline: true,
+        },
+        {
+          name: '🆔 User ID',
+          value: `\`${message.author.id}\``,
+          inline: true,
+        },
+        {
+          name: '🕒 Timestamp',
+          value: `<t:${Math.floor(message.createdTimestamp / 1000)}:F>`,
+          inline: true,
+        }
+      )
+      .setColor(EMBED_COLORS.BLUE)
+      .setFooter(createFooter())
+      .setTimestamp();
+
+    sendLogEmbed(embed);
+  } else {
+    console.log(`📩 DM from ${message.author.tag}: ${message.content}`);
+  }
+});
+
+// Logs message deletions.
+client.on('messageDelete', (message) => {
+  if (!message?.author || message.author.bot) return;
+  if (message.guild && EXCLUDED_LOG_CHANNEL_IDS.includes(message.channel.id)) return;
+
+  if (message.guild) {
+    const embed = new EmbedBuilder()
+      .setAuthor({
+        name: message.author.tag,
+        iconURL: message.author.displayAvatarURL({ dynamic: true }),
+      })
+      .setTitle(`${EMOJIS.MESSAGE_DELETED} Message Deleted`)
+      .setDescription(`🗑️ **${message.author}**'s message was deleted in **${message.channel}**.`)
+      .addFields(
+        {
+          name: '📄 Content',
+          value: message.content || '_No content_',
+          inline: false,
+        },
+        {
+          name: '🔗 Link',
+          value: `[Jump to Message](https://discord.com/channels/${message.guild.id}/${message.channel.id}/${message.id})`,
+          inline: true,
+        },
+        {
+          name: '🆔 User ID',
+          value: `\`${message.author.id}\``,
+          inline: true,
+        },
+        {
+          name: '🕒 Timestamp',
+          value: `<t:${Math.floor(message.createdTimestamp / 1000)}:F>`,
+          inline: true,
+        }
+      )
+      .setColor(EMBED_COLORS.RED)
+      .setFooter(createFooter())
+      .setTimestamp();
+
+    sendLogEmbed(embed);
+  }
+});
+
+// Logs message edits.
+client.on('messageUpdate', (oldMessage, newMessage) => {
+  if (oldMessage.author.bot) return;
+  if (oldMessage.guild && EXCLUDED_LOG_CHANNEL_IDS.includes(oldMessage.channel.id)) return;
+
+  if (oldMessage.guild) {
+    const embed = new EmbedBuilder()
+      .setAuthor({
+        name: oldMessage.author.tag,
+        iconURL: oldMessage.author.displayAvatarURL({ dynamic: true }),
+      })
+      .setTitle(`${EMOJIS.MESSAGE_EDITED} Message Edited`)
+      .setDescription(`✏️ **${oldMessage.author}** edited a message in **${oldMessage.channel}**.`)
+      .addFields(
+        { name: '🆕 New Content', value: newMessage.content || '_No content_', inline: false },
+        {
+          name: '🔗 Link',
+          value: `[Jump to Message](https://discord.com/channels/${oldMessage.guild.id}/${oldMessage.channel.id}/${oldMessage.id})`,
+          inline: true,
+        },
+        { name: '🆔 User ID', value: `\`${oldMessage.author.id}\``, inline: true },
+        {
+          name: '🕒 Edited At',
+          value: `<t:${Math.floor(newMessage.editedTimestamp / 1000)}:F>`,
+          inline: true,
+        }
+      )
+      .setColor(EMBED_COLORS.BLUE)
+      .setFooter(createFooter())
+      .setTimestamp();
+
+    sendLogEmbed(embed);
+  }
+});
+
+// Logs when a new member joins the guild.
+client.on('guildMemberAdd', (member) => {
+  const embed = new EmbedBuilder()
+    .setAuthor({
+      name: member.user.tag,
+      iconURL: member.user.displayAvatarURL({ dynamic: true }),
+    })
+    .setTitle(`${EMOJIS.MEMBER_JOINED} Welcome Aboard!`)
+    .setDescription(`🎉 Welcome ${member} to **${member.guild.name}**! We're thrilled to have you with us.`)
+    .addFields(
+      { name: '🆔 User ID', value: `\`${member.id}\``, inline: true },
+      {
+        name: '📅 Joined At',
+        value: `<t:${Math.floor(member.joinedTimestamp / 1000)}:F>`,
+        inline: true,
+      }
+    )
+    .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+    .setColor(EMBED_COLORS.GREEN)
+    .setFooter(createFooter())
+    .setTimestamp();
+
+  sendLogEmbed(embed);
+});
+
+// Logs when a member leaves or is kicked.
+client.on('guildMemberRemove', (member) => {
+  const embed = new EmbedBuilder()
+    .setAuthor({
+      name: member.user.tag,
+      iconURL: member.user.displayAvatarURL({ dynamic: true }),
+    })
+    .setTitle(`${EMOJIS.MEMBER_LEFT} Farewell!`)
+    .setDescription(`👋 **${member.user.tag}** has left **${member.guild.name}**. We'll miss you!`)
+    .addFields({ name: '🆔 User ID', value: `\`${member.id}\``, inline: true })
+    .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+    .setColor(EMBED_COLORS.RED)
+    .setFooter(createFooter())
+    .setTimestamp();
+
+  sendLogEmbed(embed);
+});
+
+// Logs when a user is banned.
+client.on('guildBanAdd', (ban) => {
+  const embed = new EmbedBuilder()
+    .setAuthor({
+      name: ban.user.tag,
+      iconURL: ban.user.displayAvatarURL({ dynamic: true }),
+    })
+    .setTitle(`${EMOJIS.USER_BANNED} User Banned`)
+    .setDescription(`🔨 **${ban.user.tag}** has been banned from **${ban.guild.name}**.`)
+    .addFields(
+      { name: '🆔 User ID', value: `\`${ban.user.id}\``, inline: true },
+      { name: '❗ Reason', value: ban.reason || '_No reason provided_', inline: false }
+    )
+    .setThumbnail(ban.user.displayAvatarURL({ dynamic: true }))
+    .setColor(EMBED_COLORS.RED)
+    .setFooter(createFooter())
+    .setTimestamp();
+
+  sendLogEmbed(embed);
+});
+
+// Logs when a user is unbanned.
+client.on('guildBanRemove', (ban) => {
+  const embed = new EmbedBuilder()
+    .setAuthor({
+      name: ban.user.tag,
+      iconURL: ban.user.displayAvatarURL({ dynamic: true }),
+    })
+    .setTitle(`${EMOJIS.USER_UNBANNED} User Unbanned`)
+    .setDescription(`🛡️ **${ban.user.tag}** has been unbanned and can rejoin **${ban.guild.name}**.`)
+    .addFields({ name: '🆔 User ID', value: `\`${ban.user.id}\``, inline: true })
+    .setThumbnail(ban.user.displayAvatarURL({ dynamic: true }))
+    .setColor(EMBED_COLORS.GREEN)
+    .setFooter(createFooter())
+    .setTimestamp();
+
+  sendLogEmbed(embed);
+});
+
+// Logs role changes for members.
+client.on('guildMemberUpdate', (oldMember, newMember) => {
+  const changes = [];
+
+  // Check for role changes
+  if (oldMember.roles.cache.size !== newMember.roles.cache.size) {
+    const oldRoles = oldMember.roles.cache.map((role) => role.name).join(', ') || 'None';
+    const newRoles = newMember.roles.cache.map((role) => role.name).join(', ') || 'None';
+
+    changes.push({
+      name: '🔄 Role Changes',
+      value: `**Old Roles:** ${oldRoles}\n**New Roles:** ${newRoles}`,
+      inline: false,
+    });
+  }
+
+  // If there are role changes, log them
+  if (changes.length > 0) {
+    const embed = new EmbedBuilder()
+      .setAuthor({
+        name: newMember.user.tag,
+        iconURL: newMember.user.displayAvatarURL({ dynamic: true }),
+      })
+      .setTitle(`${EMOJIS.ROLE_UPDATED} Role Updated`)
+      .setDescription(`🔄 **${newMember.user.tag}** has updated their roles.`)
+      .addFields(...changes, { name: '🆔 User ID', value: `\`${newMember.id}\``, inline: true })
+      .setColor(EMBED_COLORS.PURPLE)
+      .setFooter(createFooter())
+      .setTimestamp();
+
+    sendLogEmbed(embed);
+  }
+});
+
+// Logs voice state updates (join/leave/move).
+client.on('voiceStateUpdate', (oldState, newState) => {
+  let embed;
+
+  // User joined a voice channel
+  if (!oldState.channel && newState.channel) {
+    embed = new EmbedBuilder()
+      .setAuthor({
+        name: newState.member.user.tag,
+        iconURL: newState.member.user.displayAvatarURL({ dynamic: true }),
+      })
+      .setTitle(`${EMOJIS.VOICE_JOINED} Voice Channel Joined`)
+      .setDescription(`🔊 **${newState.member.user.tag}** joined **${newState.channel.name}**.`)
+      .addFields(
+        { name: '🔗 Channel ID', value: `\`${newState.channel.id}\``, inline: true },
+        { name: '🆔 User ID', value: `\`${newState.member.id}\``, inline: true }
+      )
+      .setThumbnail(newState.member.user.displayAvatarURL({ dynamic: true }))
+      .setColor(EMBED_COLORS.GREEN)
+      .setFooter(createFooter())
+      .setTimestamp();
+  }
+  // User left a voice channel
+  else if (oldState.channel && !newState.channel) {
+    embed = new EmbedBuilder()
+      .setAuthor({
+        name: oldState.member.user.tag,
+        iconURL: oldState.member.user.displayAvatarURL({ dynamic: true }),
+      })
+      .setTitle(`${EMOJIS.VOICE_LEFT} Voice Channel Left`)
+      .setDescription(`🔇 **${oldState.member.user.tag}** left **${oldState.channel.name}**.`)
+      .addFields(
+        { name: '🔗 Channel ID', value: `\`${oldState.channel.id}\``, inline: true },
+        { name: '🆔 User ID', value: `\`${oldState.member.id}\``, inline: true }
+      )
+      .setThumbnail(oldState.member.user.displayAvatarURL({ dynamic: true }))
+      .setColor(EMBED_COLORS.RED)
+      .setFooter(createFooter())
+      .setTimestamp();
+  }
+  // User switched voice channels
+  else if (
+    oldState.channel &&
+    newState.channel &&
+    oldState.channel.id !== newState.channel.id
+  ) {
+    embed = new EmbedBuilder()
+      .setAuthor({
+        name: newState.member.user.tag,
+        iconURL: newState.member.user.displayAvatarURL({ dynamic: true }),
+      })
+      .setTitle(`${EMOJIS.VOICE_SWAPPED} Voice Channel Swapped`)
+      .setDescription(
+        `🔀 **${newState.member.user.tag}** moved from **${oldState.channel.name}** to **${newState.channel.name}**.`
+      )
+      .addFields(
+        { name: '🔗 Old Channel ID', value: `\`${oldState.channel.id}\``, inline: true },
+        { name: '🔗 New Channel ID', value: `\`${newState.channel.id}\``, inline: true },
+        { name: '🆔 User ID', value: `\`${newState.member.id}\``, inline: true }
+      )
+      .setThumbnail(newState.member.user.displayAvatarURL({ dynamic: true }))
+      .setColor(EMBED_COLORS.PURPLE)
+      .setFooter(createFooter())
+      .setTimestamp();
+  }
+
+  if (embed) sendLogEmbed(embed);
+});
+
+// Logs invite creation.
+client.on('inviteCreate', (invite) => {
+  const embed = new EmbedBuilder()
+    .setAuthor({
+      name: invite.inviter.tag,
+      iconURL: invite.inviter.displayAvatarURL({ dynamic: true }),
+    })
+    .setTitle(`${EMOJIS.INVITE_CREATED} Invite Created`)
+    .setDescription(`📩 **${invite.inviter.tag}** created a new invite for **${invite.channel.name}**.`)
+    .addFields(
+      { name: '🔑 Code', value: `\`${invite.code}\``, inline: true },
+      {
+        name: '📈 Max Uses',
+        value: invite.maxUses ? `\`${invite.maxUses}\`` : 'Unlimited',
+        inline: true,
+      },
+      {
+        name: '⏰ Expires At',
+        value: invite.expiresAt
+          ? `<t:${Math.floor(invite.expiresAt.getTime() / 1000)}:F>`
+          : 'Never',
+        inline: true,
+      },
+      { name: '🔗 Channel ID', value: `\`${invite.channel.id}\``, inline: true },
+      { name: '🆔 Inviter ID', value: `\`${invite.inviter.id}\``, inline: true }
+    )
+    .setThumbnail(invite.inviter.displayAvatarURL({ dynamic: true }))
+    .setColor(EMBED_COLORS.PURPLE)
+    .setFooter(createFooter())
+    .setTimestamp();
+
+  sendLogEmbed(embed);
+});
+
+// ----------------------
+//   SLASH COMMANDS
+// ----------------------
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isCommand()) return;
+
+  const { commandName, options, user } = interaction;
+
+  // Implementing a cooldown of 5 seconds for all commands
+  if (isOnCooldown(user.id, commandName, 5)) {
+    await interaction.reply({
+      content: `${EMOJIS.WARNING} Please wait a few seconds before using the \`/${commandName}\` command again.`,
+      ephemeral: true,
+    });
+    return;
+  }
+
+  try {
+    switch (commandName) {
+      case 'joinchannel':
+        await handleJoinChannel(interaction, options);
+        break;
+
+      case 'leavechannel':
+        await handleLeaveChannel(interaction);
+        break;
+
+      case 'sendmsg':
+        await handleSendMsg(interaction, options);
+        break;
+
+      case 'dm':
+        await handleDM(interaction, options);
+        break;
+
+      case 'status':
+        await handleStatus(interaction, options);
+        break;
+
+      case 'ping':
+        await handlePing(interaction);
+        break;
+
+      case 'userinfo':
+        await handleUserInfo(interaction, options);
+        break;
+
+      default:
+        await interaction.reply({
+          content: `${EMOJIS.WARNING} Sorry, I don’t recognize that command.`,
+          ephemeral: true,
+        });
+    }
+  } catch (error) {
+    await handleError(error, interaction);
+  }
+});
+
+// ----------------------
+//    COMMAND HANDLERS
+// ----------------------
+
+/**
+ * Handles the /joinchannel command.
+ */
+async function handleJoinChannel(interaction, options) {
+  const channelId = options.getString('channel_id');
+  const channel = await client.channels.fetch(channelId);
+
+  if (!channel || !channel.isVoiceBased()) {
+    await interaction.reply({
+      content: `${EMOJIS.FAILURE} Failed to join. Please provide a valid voice channel ID.`,
+      ephemeral: true,
+    });
+    return;
+  }
+
+  // Check for necessary permissions
+  if (!channel.permissionsFor(client.user).has(['Connect', 'Speak'])) {
+    await interaction.reply({
+      content: `${EMOJIS.FAILURE} I lack the necessary permissions to join and speak in that voice channel.`,
+      ephemeral: true,
+    });
+    return;
+  }
+
+  joinVoiceChannel({
+    channelId: channel.id,
+    guildId: channel.guild.id,
+    adapterCreator: channel.guild.voiceAdapterCreator,
+  });
+
+  const embed = new EmbedBuilder()
+    .setTitle(`${EMOJIS.SUCCESS} Joined Voice Channel`)
+    .setDescription(`🔊 Successfully joined **${channel.name}**.`)
+    .setColor(EMBED_COLORS.GREEN)
+    .setFooter(createFooter())
+    .setTimestamp();
+
+  await interaction.reply({ embeds: [embed], ephemeral: true });
+}
+
+/**
+ * Handles the /leavechannel command.
+ */
+async function handleLeaveChannel(interaction) {
+  const guild = interaction.guild;
+  const voiceChannel = guild.members.me.voice.channel;
+
+  if (!voiceChannel) {
+    await interaction.reply({
+      content: `${EMOJIS.FAILURE} I am not currently in a voice channel.`,
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const connection = getVoiceConnection(guild.id);
+  if (connection) connection.destroy();
+
+  const embed = new EmbedBuilder()
+    .setTitle(`${EMOJIS.SUCCESS} Left Voice Channel`)
+    .setDescription(`🔇 Successfully left **${voiceChannel.name}**.`)
+    .setColor(EMBED_COLORS.RED)
+    .setFooter(createFooter())
+    .setTimestamp();
+
+  await interaction.reply({ embeds: [embed], ephemeral: true });
+}
+
+/**
+ * Handles the /sendmsg command.
+ */
+async function handleSendMsg(interaction, options) {
+  const messageContent = options.getString('message');
+  const channelId = options.getString('channel_id');
+  const messageLink = options.getString('message_link');
+
+  const targetChannel = await client.channels.fetch(channelId);
+  if (!targetChannel) {
+    await interaction.reply({
+      content: `${EMOJIS.FAILURE} Failed to send the message. Channel not found.`,
+      ephemeral: true,
+    });
+    return;
+  }
+
+  if (messageLink) {
+    const messageId = extractMessageId(messageLink);
+    if (!messageId) {
+      await interaction.reply({
+        content: `${EMOJIS.FAILURE} Invalid message link provided.`,
+        ephemeral: true,
+      });
+      return;
+    }
+
+    try {
+      const targetMessage = await targetChannel.messages.fetch(messageId);
+      const button = new ButtonBuilder()
+        .setLabel('Reply')
+        .setStyle(ButtonStyle.Primary)
+        .setCustomId(`reply_${targetMessage.id}`);
+
+      const row = new ActionRowBuilder().addComponents(button);
+
+      await targetMessage.reply({ content: messageContent, components: [row] });
+      const embed = new EmbedBuilder()
+        .setTitle(`${EMOJIS.SUCCESS} Message Replied`)
+        .setDescription(`✅ Successfully replied to [this message](${messageLink}).`)
+        .setColor(EMBED_COLORS.GREEN)
+        .setFooter(createFooter())
+        .setTimestamp();
+
+      await interaction.reply({ embeds: [embed], ephemeral: true });
+    } catch (error) {
+      await interaction.reply({
+        content: `${EMOJIS.FAILURE} Failed to find the message to reply to.`,
+        ephemeral: true,
+      });
+      throw error; // Re-throw to be caught by handleError
+    }
+  } else {
+    await targetChannel.send(messageContent);
+    const embed = new EmbedBuilder()
+      .setTitle(`${EMOJIS.SUCCESS} Message Sent`)
+      .setDescription(`✅ Successfully sent a message to <#${channelId}>.`)
+      .setColor(EMBED_COLORS.GREEN)
+      .setFooter(createFooter())
+      .setTimestamp();
+
+    await interaction.reply({ embeds: [embed], ephemeral: true });
+  }
+}
+
+/**
+ * Handles the /dm command.
+ */
+async function handleDM(interaction, options) {
+  const userId = options.getString('user_id');
+  const messageContent = options.getString('message');
+
+  try {
+    const user = await client.users.fetch(userId);
+    if (!user) throw new Error('User not found.');
+
+    await user.send(messageContent);
+    console.log(`📩 DM sent to ${user.tag}: ${messageContent}`);
+
+    const embed = new EmbedBuilder()
+      .setTitle(`${EMOJIS.SUCCESS} DM Sent`)
+      .setDescription(`✅ Successfully sent a DM to **${user.tag}**.`)
+      .setColor(EMBED_COLORS.GREEN)
+      .setFooter(createFooter())
+      .setTimestamp();
+
+    await interaction.reply({ embeds: [embed], ephemeral: true });
+  } catch (error) {
+    await interaction.reply({
+      content: `${EMOJIS.FAILURE} Failed to send the DM. User not found or cannot receive DMs.`,
+      ephemeral: true,
+    });
+    throw error; // Re-throw to be caught by handleError
+  }
+}
+
+/**
+ * Handles the /status command.
+ */
+async function handleStatus(interaction, options) {
+  const statusType = options.getString('status_type');
+  const statusMessage = options.getString('status_message') || '';
+  const customPrefix = options.getString('custom_prefix') || '';
+
+  if (statusType === 'NONE') {
+    // Clear presence
+    client.user.setPresence({ activities: [], status: 'online' });
+    const embed = new EmbedBuilder()
+      .setTitle(`${EMOJIS.SUCCESS} Status Cleared`)
+      .setDescription(`🛑 Successfully cleared the bot's status.`)
+      .setColor(EMBED_COLORS.RED)
+      .setFooter(createFooter())
+      .setTimestamp();
+
+    await interaction.reply({ embeds: [embed], ephemeral: true });
+    return;
+  }
+
+  // Map string to ActivityType
+  const activityType = mapStatusType(statusType);
+  if (!activityType) {
+    await interaction.reply({
+      content: `${EMOJIS.FAILURE} Invalid status type provided.`,
+      ephemeral: true,
+    });
+    return;
+  }
+
+  // Construct the final status message
+  let finalStatusMessage = statusMessage;
+  if (customPrefix) {
+    finalStatusMessage = `${customPrefix} ${statusMessage}`;
+  }
+
+  // Set the activity with the chosen type and message
+  client.user.setActivity(finalStatusMessage, { type: activityType });
+  const embed = new EmbedBuilder()
+    .setTitle(`${EMOJIS.SUCCESS} Status Updated`)
+    .setDescription(`🎭 Successfully updated status to **${statusType.toLowerCase()} ${finalStatusMessage}**.`)
+    .setColor(EMBED_COLORS.BLUE)
+    .setFooter(createFooter())
+    .setTimestamp();
+
+  await interaction.reply({ embeds: [embed], ephemeral: true });
+}
+
+/**
+ * Handles the /ping command.
+ */
+async function handlePing(interaction) {
+  const sent = await interaction.reply({ content: '🏓 Pinging...', fetchReply: true });
+  const latency = sent.createdTimestamp - interaction.createdTimestamp;
+  const apiLatency = Math.round(client.ws.ping);
+
+  const embed = new EmbedBuilder()
+    .setTitle(`${EMOJIS.PING} Pong!`)
+    .addFields(
+      { name: 'Latency', value: `${latency}ms`, inline: true },
+      { name: 'API Latency', value: `${apiLatency}ms`, inline: true }
+    )
+    .setColor(EMBED_COLORS.GREEN)
+    .setFooter(createFooter())
+    .setTimestamp();
+
+  await interaction.editReply({ embeds: [embed], content: null });
+}
+
+/**
+ * Handles the /userinfo command.
+ */
+async function handleUserInfo(interaction, options) {
+  const targetUser = options.getUser('target') || interaction.user;
+  const member = interaction.guild.members.cache.get(targetUser.id);
+
+  const embed = new EmbedBuilder()
+    .setAuthor({
+      name: `${targetUser.tag}`,
+      iconURL: targetUser.displayAvatarURL({ dynamic: true }),
+    })
+    .setTitle(`${EMOJIS.USERINFO} User Information`)
+    .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
+    .addFields(
+      { name: '🆔 User ID', value: `\`${targetUser.id}\``, inline: true },
+      { name: '📅 Joined Discord', value: `<t:${Math.floor(targetUser.createdTimestamp / 1000)}:F>`, inline: true },
+      { name: '📅 Joined Server', value: member ? `<t:${Math.floor(member.joinedTimestamp / 1000)}:F>` : 'N/A', inline: true },
+      { name: '📌 Roles', value: member ? member.roles.cache.map(role => role.name).join(', ') || 'None' : 'N/A', inline: false },
+      { name: '🔗 Profile', value: `[Click Here](${targetUser.displayAvatarURL({ dynamic: true, size: 1024 })})`, inline: true }
+    )
+    .setColor(EMBED_COLORS.BLUE)
+    .setFooter(createFooter())
+    .setTimestamp();
+
+  await interaction.reply({ embeds: [embed], ephemeral: true });
+}
+
+/**
+ * Maps status type string to ActivityType enum.
+ * @param {string} type - The status type string.
+ * @returns {ActivityType|null} - The corresponding ActivityType or null if invalid.
+ */
+function mapStatusType(type) {
+  switch (type) {
+    case 'PLAYING':
+      return ActivityType.Playing;
+    case 'LISTENING':
+      return ActivityType.Listening;
+    case 'WATCHING':
+      return ActivityType.Watching;
+    case 'COMPETING':
+      return ActivityType.Competing;
+    default:
+      return null;
+  }
+}
+
+// ----------------------
+//      ERROR HANDLING
+// ----------------------
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', async (reason, promise) => {
+  console.error('❌ Unhandled Rejection:', reason);
+  await logErrorToDiscord(reason, 'Unhandled Rejection');
+  // Optionally, you can decide to exit the process
+  // process.exit(1);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', async (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  await logErrorToDiscord(error, 'Uncaught Exception');
+  process.exit(1); // Exit the process after logging the error
+});
+
+// ----------------------
+//      BOT LOGIN
+// ----------------------
+client.login(token).catch(async (error) => {
+  console.error('❌ Failed to login:', error);
+  await logErrorToDiscord(error, 'Login Failure');
+  process.exit(1); // Exit the process after logging the error
+});
